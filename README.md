@@ -8,10 +8,6 @@
 A native macOS menu bar application for finding and killing processes running on open ports. Perfect for developers who need to quickly free up ports like 3000, 8080, 5173, etc.
 
 <p align="center">
-  <img src=".github/assets/screen.png" alt="PortKiller Screenshot" width="400">
-</p>
-
-<p align="center">
   <img src=".github/assets/port-kill.gif" alt="PortKiller Demo" width="400">
 </p>
 
