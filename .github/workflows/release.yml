@@ -157,32 +157,38 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"  # Remove 'v' prefix
           DMG_SIZE=$(stat -f%z "$DMG_NAME")
           DMG_URL="https://github.com/productdevbook/port-killer/releases/download/${GITHUB_REF_NAME}/${DMG_NAME}"
-          PUB_DATE=$(date -R)
 
           # Create or update appcast.xml
-          cat > appcast.xml << XMLEOF
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-  <channel>
-    <title>PortKiller Updates</title>
-    <link>https://github.com/productdevbook/port-killer</link>
-    <description>Most recent updates to PortKiller</description>
-    <language>en</language>
-    <item>
-      <title>Version ${VERSION}</title>
-      <pubDate>${PUB_DATE}</pubDate>
-      <sparkle:version>${VERSION}</sparkle:version>
-      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <enclosure
-        url="${DMG_URL}"
-        length="${DMG_SIZE}"
-        type="application/octet-stream"
-        sparkle:edSignature="${SPARKLE_SIGNATURE}" />
-    </item>
-  </channel>
-</rss>
-XMLEOF
+          cat > appcast.xml << 'APPCAST_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>PortKiller Updates</title>
+              <link>https://github.com/productdevbook/port-killer</link>
+              <description>Most recent updates to PortKiller</description>
+              <language>en</language>
+              <item>
+                <title>Version VERSIONPLACEHOLDER</title>
+                <pubDate>DATEPLACEHOLDER</pubDate>
+                <sparkle:version>VERSIONPLACEHOLDER</sparkle:version>
+                <sparkle:shortVersionString>VERSIONPLACEHOLDER</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+                <enclosure
+                  url="URLPLACEHOLDER"
+                  length="SIZEPLACEHOLDER"
+                  type="application/octet-stream"
+                  sparkle:edSignature="SIGPLACEHOLDER" />
+              </item>
+            </channel>
+          </rss>
+          APPCAST_EOF
+
+          # Replace placeholders
+          sed -i '' "s|VERSIONPLACEHOLDER|${VERSION}|g" appcast.xml
+          sed -i '' "s|DATEPLACEHOLDER|$(date -R)|g" appcast.xml
+          sed -i '' "s|URLPLACEHOLDER|${DMG_URL}|g" appcast.xml
+          sed -i '' "s|SIZEPLACEHOLDER|${DMG_SIZE}|g" appcast.xml
+          sed -i '' "s|SIGPLACEHOLDER|${SPARKLE_SIGNATURE}|g" appcast.xml
 
       - name: Commit appcast.xml
         run: |
