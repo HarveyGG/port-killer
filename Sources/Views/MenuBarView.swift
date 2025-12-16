@@ -6,17 +6,34 @@ struct MenuBarView: View {
     @State private var searchText = ""
 
     private func appIcon() -> NSImage {
-        let candidates = [
-            Bundle.module.url(forResource: "ToolbarIcon@2x", withExtension: "png"),
-            Bundle.main.resourceURL?.appendingPathComponent("PortKiller_PortKiller.bundle/ToolbarIcon@2x.png")
+        if let image = loadIcon(named: "ToolbarIcon@2x") {
+            return image
+        }
+        return NSImage(systemSymbolName: "network", accessibilityDescription: nil) ?? NSImage()
+    }
+
+    private func loadIcon(named name: String) -> NSImage? {
+        let bundlePaths = [
+            Bundle.main.resourceURL?.appendingPathComponent("PortKiller_PortKiller.bundle"),
+            Bundle.main.bundleURL.appendingPathComponent("PortKiller_PortKiller.bundle"),
+            Bundle.main.resourceURL,
+            Bundle.main.bundleURL
         ]
 
-        for candidate in candidates {
-            if let url = candidate, let image = NSImage(contentsOf: url) {
+        for bundlePath in bundlePaths {
+            if let path = bundlePath?.appendingPathComponent("\(name).png"),
+               FileManager.default.fileExists(atPath: path.path),
+               let image = NSImage(contentsOf: path) {
                 return image
             }
         }
-        return NSImage(systemSymbolName: "network", accessibilityDescription: nil) ?? NSImage()
+
+        if let url = Bundle.module.url(forResource: name, withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+
+        return nil
     }
 
     private var filteredPorts: [PortInfo] {
