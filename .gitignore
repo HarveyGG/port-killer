@@ -47,3 +47,7 @@ sparkle_private_key
 *.certSigningRequest
 
 docs
+
+# Node.js / Bun
+node_modules/
+bun.lockb
