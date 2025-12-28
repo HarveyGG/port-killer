@@ -15,6 +15,7 @@ import Foundation
 
 /// Available sort orders for port table
 enum SortOrder: String, CaseIterable {
+    case recent = "Recent"
     case port = "Port"
     case process = "Process"
     case pid = "PID"

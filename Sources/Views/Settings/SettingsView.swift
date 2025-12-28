@@ -34,6 +34,9 @@ struct SettingsView: View {
                 // MARK: - General
                 GeneralSettingsSection()
 
+                // MARK: - Process Filtering
+                ProcessFamiliaritySettingsSection(appState: state)
+
                 // MARK: - Port Forwarding
                 PortForwardingSettingsSection()
 

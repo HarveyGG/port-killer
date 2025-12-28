@@ -16,6 +16,10 @@ extension Defaults.Keys {
     static let sponsorCache = Key<SponsorCache?>("sponsorCache", default: nil)
     static let lastSponsorWindowShown = Key<Date?>("lastSponsorWindowShown", default: nil)
     static let sponsorDisplayInterval = Key<SponsorDisplayInterval>("sponsorDisplayInterval", default: .bimonthly)
+    
+    // Process familiarity keys
+    static let hideFamiliarProcesses = Key<Bool>("hideFamiliarProcesses", default: true)
+    static let processFamiliarityData = Key<ProcessFamiliarityData>("processFamiliarityData", default: ProcessFamiliarityData())
 }
 
 // MARK: - Keyboard Shortcuts
@@ -102,6 +106,18 @@ final class AppState {
         if filter.isActive {
             result = result.filter { filter.matches($0, favorites: favorites, watched: watchedPorts) }
         }
+        
+        if hideFamiliarProcesses {
+            let skipFamiliarityFilter = selectedSidebarItem == .favorites || selectedSidebarItem == .watched
+            if !skipFamiliarityFilter {
+                result = result.filter { port in
+                    if favorites.contains(port.port) || watchedPorts.contains(where: { $0.port == port.port }) {
+                        return true
+                    }
+                    return !isFamiliar(port)
+                }
+            }
+        }
 
         return result
     }
@@ -153,6 +169,32 @@ final class AppState {
 
     /// Tracks previous port states for watch notifications
     var previousPortStates: [Int: Bool] = [:]
+    
+    /// Last refresh time for calculating seen duration
+    @ObservationIgnored var lastRefreshTime: Date?
+    
+    /// Tracks which process keys were visible in the previous scan (for appear/disappear detection)
+    @ObservationIgnored var lastVisibleProcessKeys: Set<String> = []
+    
+    /// Process familiarity data, synced with UserDefaults
+    private var _processFamiliarityData: ProcessFamiliarityData = Defaults[.processFamiliarityData] {
+        didSet { Defaults[.processFamiliarityData] = _processFamiliarityData }
+    }
+    
+    var processFamiliarityData: ProcessFamiliarityData {
+        get { _processFamiliarityData }
+        set { _processFamiliarityData = newValue }
+    }
+    
+    /// Whether to hide familiar processes by default
+    private var _hideFamiliarProcesses: Bool = Defaults[.hideFamiliarProcesses] {
+        didSet { Defaults[.hideFamiliarProcesses] = _hideFamiliarProcesses }
+    }
+    
+    var hideFamiliarProcesses: Bool {
+        get { _hideFamiliarProcesses }
+        set { _hideFamiliarProcesses = newValue }
+    }
 
     // MARK: - Initialization
 

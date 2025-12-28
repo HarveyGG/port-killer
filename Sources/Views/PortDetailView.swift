@@ -179,6 +179,44 @@ struct PortDetailView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                
+                HStack(spacing: 8) {
+                    if appState.isFamiliar(port) {
+                        if appState.processFamiliarityData.alwaysShowProcessKeys.contains(port.processKey) {
+                            Button {
+                                appState.removeFamiliarityMark(port)
+                            } label: {
+                                Text("Remove Always Show")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            Button {
+                                appState.removeFamiliarityMark(port)
+                            } label: {
+                                Text("Remove Familiar Mark")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    } else {
+                        Button {
+                            appState.markAsFamiliar(port)
+                        } label: {
+                            Text("Mark as Familiar")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        
+                        Button {
+                            appState.markAsAlwaysShow(port)
+                        } label: {
+                            Text("Always Show")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
 
                 // Tunnel section
                 if port.isActive {

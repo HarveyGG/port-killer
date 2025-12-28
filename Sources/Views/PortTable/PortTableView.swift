@@ -14,7 +14,7 @@ import Defaults
 
 struct PortTableView: View {
     @Environment(AppState.self) private var appState
-    @State private var sortOrder: SortOrder = .port
+    @State private var sortOrder: SortOrder = .recent
     @State private var sortAscending = true
     @Default(.useTreeView) private var useTreeView
     @State private var expandedProcesses: Set<Int> = []
@@ -82,6 +82,7 @@ struct PortTableView: View {
             // Account for status indicator circle space
             Spacer()
                 .frame(width: 16)
+            headerButton("Recent", .recent, width: 80)
             headerButton("Port", .port, width: 70)
             // Process column (flexible)
             Button {
@@ -207,9 +208,20 @@ struct PortTableView: View {
             ProcessGroup(
                 id: pid,
                 processName: ports.first?.processName ?? "Unknown",
-                ports: ports.sorted { $0.port < $1.port }
+                ports: ports.sorted(by: appState.sortByRecentAppearance)
             )
-        }.sorted { $0.processName.localizedCaseInsensitiveCompare($1.processName) == .orderedAscending }
+        }.sorted { a, b in
+            if sortOrder == .recent {
+                let aPort = a.ports.first
+                let bPort = b.ports.first
+                if let aPort = aPort, let bPort = bPort {
+                    if appState.sortByRecentAppearance(aPort, bPort) {
+                        return true
+                    }
+                }
+            }
+            return a.processName.localizedCaseInsensitiveCompare(b.processName) == .orderedAscending
+        }
     }
 
     /// Sorts ports based on current sort order
@@ -218,6 +230,8 @@ struct PortTableView: View {
         return ports.sorted { a, b in
             let result: Bool
             switch sortOrder {
+            case .recent:
+                result = appState.sortByRecentAppearance(a, b)
             case .port:
                 result = a.port < b.port
             case .process:

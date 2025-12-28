@@ -29,39 +29,53 @@ struct MenuBarView: View {
             ProcessGroup(
                 id: pid,
                 processName: ports.first?.processName ?? "Unknown",
-                ports: ports.sorted { $0.port < $1.port }
+                ports: ports.sorted(by: state.sortByRecentAppearance)
             )
         }.sorted { a, b in
-            // Check if groups have favorite or watched ports
+            let aPort = a.ports.first
+            let bPort = b.ports.first
+            if let aPort = aPort, let bPort = bPort {
+                if state.sortByRecentAppearance(aPort, bPort) {
+                    return true
+                }
+            }
+            
             let aHasFavorite = a.ports.contains(where: { state.isFavorite($0.port) })
             let aHasWatched = a.ports.contains(where: { state.isWatching($0.port) })
             let bHasFavorite = b.ports.contains(where: { state.isFavorite($0.port) })
             let bHasWatched = b.ports.contains(where: { state.isWatching($0.port) })
 
-            // Priority: Favorite > Watched > Neither
             let aPriority = aHasFavorite ? 2 : (aHasWatched ? 1 : 0)
             let bPriority = bHasFavorite ? 2 : (bHasWatched ? 1 : 0)
 
             if aPriority != bPriority {
                 return aPriority > bPriority
             } else {
-                // Same priority, sort alphabetically by process name
                 return a.processName.localizedCaseInsensitiveCompare(b.processName) == .orderedAscending
             }
         }
     }
 
-    /// Filters ports based on search text and sorts by favorites
+    /// Filters ports based on search text and sorts by recent
     private var filteredPorts: [PortInfo] {
-        let filtered = searchText.isEmpty ? state.ports : state.ports.filter {
-            String($0.port).contains(searchText) || $0.processName.localizedCaseInsensitiveContains(searchText)
+        var filtered = state.ports
+        
+        if state.hideFamiliarProcesses {
+            filtered = filtered.filter { port in
+                if state.favorites.contains(port.port) || state.watchedPorts.contains(where: { $0.port == port.port }) {
+                    return true
+                }
+                return !state.isFamiliar(port)
+            }
         }
-        return filtered.sorted { a, b in
-            let aFav = state.isFavorite(a.port)
-            let bFav = state.isFavorite(b.port)
-            if aFav != bFav { return aFav }
-            return a.port < b.port
+        
+        if !searchText.isEmpty {
+            filtered = filtered.filter {
+                String($0.port).contains(searchText) || $0.processName.localizedCaseInsensitiveContains(searchText)
+            }
         }
+        
+        return filtered.sorted(by: state.sortByRecentAppearance)
     }
 
     /// Filters port-forward connections based on search text
@@ -105,5 +119,6 @@ struct MenuBarView: View {
         .onAppear { updateGroupedByProcess() }
         .onChange(of: state.ports) { _, _ in updateGroupedByProcess() }
         .onChange(of: searchText) { _, _ in updateGroupedByProcess() }
+        .onChange(of: state.hideFamiliarProcesses) { _, _ in updateGroupedByProcess() }
     }
 }
