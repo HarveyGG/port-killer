@@ -255,8 +255,9 @@ jobs:
           node-version: lts/*
 
       - name: Create GitHub Release with Changelog
+        continue-on-error: true
         run: |
-          npx changelogithub || echo "changelogithub failed, continuing..."
+          npx --yes changelogithub@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -310,13 +311,16 @@ jobs:
           sed -i '' "s|SIGPLACEHOLDER|${SPARKLE_SIGNATURE}|g" appcast.xml
 
       - name: Commit appcast.xml
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          if [ "$CURRENT_BRANCH" != "main" ]; then
-            git checkout main || git checkout -b main
-          fi
+          
+          # Fetch latest main branch
+          git fetch origin main
+          git checkout main
+          git pull origin main
+          
           git add appcast.xml
           if git diff --staged --quiet; then
             echo "No changes to commit"

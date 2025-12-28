@@ -138,11 +138,17 @@ cp "Resources/Info.plist" "$CONTENTS_DIR/"
 echo "📂 Contents of $BUILD_DIR:"
 ls -la "$BUILD_DIR/" | grep -E "\.bundle$|^total" || echo "  (no bundles found)"
 
-# Generate icons from AppIcon.icon using actool (Xcode 26+)
+# Generate icons from AppIcon.icon
 if [ -d "Resources/AppIcon.icon" ]; then
-    echo "🎨 Compiling AppIcon.icon with actool..."
+    echo "🎨 Compiling AppIcon.icon..."
     
-    # Use actool to compile .icon folder - generates both Assets.car and fallback .icns
+    # Try actool first (Xcode 26+), but fallback if it crashes
+    # actool can crash in CI environments due to dyld symbol issues
+    # We check if output files exist rather than exit code (since it crashes)
+    ACTOOL_OUTPUT="$RESOURCES_DIR/AppIcon.icns"
+    
+    # Run actool, suppress dyld warnings (they're harmless if output is generated)
+    # Redirect stderr to filter out dyld symbol warnings that occur in CI
     xcrun actool "Resources/AppIcon.icon" \
         --compile "$RESOURCES_DIR" \
         --app-icon AppIcon \
@@ -150,12 +156,52 @@ if [ -d "Resources/AppIcon.icon" ]; then
         --platform macosx \
         --minimum-deployment-target 15.0 \
         --include-all-app-icons \
-        --output-partial-info-plist /tmp/icon-info.plist
+        --output-partial-info-plist /tmp/icon-info.plist 2>&1 | grep -v "dyld.*symbol" | grep -v "BAD4007" || true
     
-    echo "  ✅ Generated AppIcon.icns and Assets.car"
+    # Check if actool actually produced the output file
+    if [ -f "$ACTOOL_OUTPUT" ] && [ -s "$ACTOOL_OUTPUT" ]; then
+        echo "  ✅ Generated AppIcon.icns and Assets.car using actool"
+    else
+        echo "  ⚠️  actool failed or crashed, trying iconutil fallback..."
+        
+        # Fallback: Use iconutil with .iconset
+        # Check if we can create iconset from existing resources
+        ICONSET_DIR="/tmp/AppIcon.iconset"
+        mkdir -p "$ICONSET_DIR"
+        
+        # Try to find PNG files in Assets folder
+        if [ -d "Resources/AppIcon.icon/Assets" ]; then
+            # Look for common icon sizes
+            for size in 16 32 64 128 256 512 1024; do
+                for scale in "" "@2x"; do
+                    png_file=$(find "Resources/AppIcon.icon/Assets" -name "*${size}${scale}*" -o -name "*icon_${size}${scale}*" | head -1)
+                    if [ -f "$png_file" ]; then
+                        if [ -z "$scale" ]; then
+                            cp "$png_file" "$ICONSET_DIR/icon_${size}x${size}.png" 2>/dev/null || true
+                        else
+                            cp "$png_file" "$ICONSET_DIR/icon_${size}x${size}@2x.png" 2>/dev/null || true
+                        fi
+                    fi
+                done
+            done
+        fi
+        
+        # If we found any PNGs, try iconutil
+        if [ "$(ls -A $ICONSET_DIR/*.png 2>/dev/null)" ]; then
+            if iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns" 2>/dev/null; then
+                echo "  ✅ Generated AppIcon.icns using iconutil"
+            else
+                echo "  ⚠️  iconutil failed, app will run without custom icon"
+            fi
+        else
+            echo "  ⚠️  Could not extract icon images, app will run without custom icon"
+            echo "  💡 Tip: Pre-compile AppIcon.icns and place in Resources/ for CI builds"
+        fi
+        
+        rm -rf "$ICONSET_DIR"
+    fi
 elif [ -f "Resources/AppIcon.icns" ]; then
-    # Fallback: copy static .icns if .icon folder doesn't exist
-    echo "  → Copying static AppIcon.icns (legacy fallback)"
+    echo "  → Copying static AppIcon.icns"
     cp "Resources/AppIcon.icns" "$RESOURCES_DIR/"
 fi
 
