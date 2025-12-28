@@ -25,11 +25,19 @@ jobs:
           xcode-version: latest-stable
 
       - name: Import Code Signing Certificate
+        id: signing
         env:
           CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
           CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ github.run_id }}
         run: |
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$CERTIFICATE_BASE64" ] || [ -z "$CERTIFICATE_PASSWORD" ]; then
+            echo "Signing secrets not configured; skipping codesign/notarization."
+            exit 0
+          fi
+
           # Create temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
@@ -37,14 +45,6 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # Import certificate
-          if [ -z "$CERTIFICATE_BASE64" ]; then
-            echo "Error: DEVELOPER_ID_CERTIFICATE_BASE64 is not set" >&2
-            exit 1
-          fi
-          if [ -z "$CERTIFICATE_PASSWORD" ]; then
-            echo "Error: DEVELOPER_ID_CERTIFICATE_PASSWORD is not set" >&2
-            exit 1
-          fi
           CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
           printf '%s' "$CERTIFICATE_BASE64" | tr -d '\n' | base64 -D > "$CERTIFICATE_PATH"
           
@@ -57,6 +57,7 @@ jobs:
           security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Update version in Info.plist
         run: |
@@ -77,9 +78,15 @@ jobs:
           ./scripts/build-app.sh
 
       - name: Sign app with Developer ID
+        if: ${{ steps.signing.outputs.enabled == 'true' }}
         env:
           DEVELOPER_ID_NAME: ${{ secrets.DEVELOPER_ID_NAME }}
         run: |
+          if [ -z "$DEVELOPER_ID_NAME" ]; then
+            echo "DEVELOPER_ID_NAME not configured; skipping codesign."
+            exit 0
+          fi
+
           APP_PATH=".build/release/PortKiller.app"
           FRAMEWORKS_PATH="$APP_PATH/Contents/Frameworks"
           SPARKLE="$FRAMEWORKS_PATH/Sparkle.framework/Versions/B"
@@ -114,11 +121,17 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
       - name: Notarize app
+        if: ${{ steps.signing.outputs.enabled == 'true' }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_ID_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "Apple notarization secrets not configured; skipping notarization."
+            exit 0
+          fi
+
           APP_PATH=".build/release/PortKiller.app"
 
           # Create ZIP for notarization
@@ -176,17 +189,28 @@ jobs:
           echo "DMG_NAME=$DMG_NAME" >> $GITHUB_ENV
 
       - name: Sign DMG
+        if: ${{ steps.signing.outputs.enabled == 'true' }}
         env:
           DEVELOPER_ID_NAME: ${{ secrets.DEVELOPER_ID_NAME }}
         run: |
+          if [ -z "$DEVELOPER_ID_NAME" ]; then
+            echo "DEVELOPER_ID_NAME not configured; skipping DMG codesign."
+            exit 0
+          fi
           codesign --force --sign "$DEVELOPER_ID_NAME" --timestamp "$DMG_NAME"
 
       - name: Notarize DMG
+        if: ${{ steps.signing.outputs.enabled == 'true' }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_ID_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "Apple notarization secrets not configured; skipping DMG notarization."
+            exit 0
+          fi
+
           # DMG notarization is optional since the app inside is already notarized
           # But we try anyway for best user experience
           SUBMIT_OUTPUT=$(xcrun notarytool submit "$DMG_NAME" \
@@ -207,6 +231,12 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "SPARKLE_PRIVATE_KEY not configured; skipping Sparkle signature."
+            echo "SPARKLE_SIGNATURE=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
           # Download Sparkle tools
           curl -L -o sparkle.tar.xz "https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz"
           mkdir -p sparkle_tools
@@ -244,6 +274,7 @@ jobs:
           BUILD_NUMBER=$(git rev-list --count HEAD)  # Same as CFBundleVersion in app
           DMG_SIZE=$(stat -f%z "$DMG_NAME")
           DMG_URL="https://github.com/productdevbook/port-killer/releases/download/${GITHUB_REF_NAME}/${DMG_NAME}"
+          SPARKLE_SIGNATURE="${SPARKLE_SIGNATURE:-}"
 
           echo "Version: $VERSION, Build: $BUILD_NUMBER"
 

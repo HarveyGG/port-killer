@@ -91,17 +91,10 @@ jobs:
           SHA256=${{ steps.sha256.outputs.sha256 }}
           DMG_NAME=${{ steps.sha256.outputs.DMG_NAME }}
           DMG_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${DMG_NAME}"
+          TAP_REPO="${{ github.repository_owner }}/homebrew-tap"
           
-          # Use TAP_GITHUB_TOKEN if configured, otherwise fallback to GITHUB_TOKEN
-          # GITHUB_TOKEN works if homebrew-tap is in the same organization
-          if [ -n "$TAP_GITHUB_TOKEN" ]; then
-            TAP_GITHUB_TOKEN="$TAP_GITHUB_TOKEN"
-            echo "Using TAP_GITHUB_TOKEN"
-          elif [ -n "$GITHUB_TOKEN" ]; then
-            TAP_GITHUB_TOKEN="$GITHUB_TOKEN"
-            echo "Using default GITHUB_TOKEN (works if homebrew-tap is in the same organization)"
-          else
-            echo "Warning: Neither TAP_GITHUB_TOKEN nor GITHUB_TOKEN is available"
+          if [ -z "$TAP_GITHUB_TOKEN" ]; then
+            echo "Warning: TAP_GITHUB_TOKEN not configured"
             echo "Skipping Homebrew tap update"
             exit 0
           fi
@@ -112,10 +105,10 @@ jobs:
           
           # Clone the tap repository
           echo "Cloning homebrew-tap repository..."
-          if ! git clone https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/productdevbook/homebrew-tap.git /tmp/homebrew-tap; then
+          if ! git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/${TAP_REPO}.git" /tmp/homebrew-tap; then
             echo "Error: Failed to clone homebrew-tap repository"
             echo "Please ensure:"
-            echo "  1. Repository exists: https://github.com/productdevbook/homebrew-tap"
+            echo "  1. Repository exists: https://github.com/${TAP_REPO}"
             echo "  2. TAP_GITHUB_TOKEN has proper permissions"
             exit 1
           fi
