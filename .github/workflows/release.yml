@@ -61,11 +61,9 @@ jobs:
 
       - name: Update version in Info.plist
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"  # Remove 'v' prefix (v1.2.4 -> 1.2.4)
+          VERSION="${GITHUB_REF_NAME#v}"
           BUILD_NUMBER=$(git rev-list --count HEAD)
 
-          # Update CFBundleShortVersionString
-          sed -i '' "s/<string>.*<\/string><!--VERSION-->/<string>${VERSION}<\/string><!--VERSION-->/" Resources/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" Resources/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" Resources/Info.plist
 
