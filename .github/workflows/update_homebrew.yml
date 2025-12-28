@@ -1,0 +1,165 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types: [published, created, released]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update (e.g., 1.0.6)'
+        required: false
+        type: string
+
+jobs:
+  update-homebrew:
+    runs-on: macos-latest
+    # Only run after Release workflow succeeded when triggered via workflow_run
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Extract version from tag
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Fallback to latest published release when the release was created by another workflow (GITHUB_TOKEN)
+            VERSION=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "${{ github.api_url }}/repos/${{ github.repository }}/releases/latest" | jq -r '.tag_name' | sed 's/^v//')
+          else
+            VERSION=$(echo "${GITHUB_REF}" | sed 's#refs/tags/v##')
+          fi
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "Failed to determine version" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+      
+      - name: Download DMG and calculate SHA256
+        id: sha256
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          DMG_NAME="PortKiller-v${VERSION}-arm64.dmg"
+          
+          # Wait for GitHub to generate the release assets
+          echo "Waiting for GitHub to generate release assets..."
+          sleep 30
+          
+          # Download the DMG from GitHub release
+          echo "Downloading DMG from release..."
+          DMG_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${DMG_NAME}"
+          
+          # Retry logic for downloading
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -L -f -o "$DMG_NAME" "$DMG_URL"; then
+              break
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Download failed, retrying... ($RETRY_COUNT/$MAX_RETRIES)"
+            sleep 10
+          done
+          
+          if [ ! -f "$DMG_NAME" ]; then
+            echo "Error: Failed to download DMG after $MAX_RETRIES attempts" >&2
+            exit 1
+          fi
+          
+          # Calculate SHA256
+          SHA256=$(shasum -a 256 "$DMG_NAME" | cut -d' ' -f1)
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "SHA256: $SHA256"
+          echo "DMG_NAME=$DMG_NAME" >> $GITHUB_OUTPUT
+      
+      - name: Update Homebrew Tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          SHA256=${{ steps.sha256.outputs.sha256 }}
+          DMG_NAME=${{ steps.sha256.outputs.DMG_NAME }}
+          DMG_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${DMG_NAME}"
+          
+          # Use HOMEBREW_TAP_TOKEN if configured, otherwise fallback to GITHUB_TOKEN
+          # GITHUB_TOKEN works if homebrew-tap is in the same organization
+          if [ -n "$HOMEBREW_TAP_TOKEN" ]; then
+            TAP_GITHUB_TOKEN="$HOMEBREW_TAP_TOKEN"
+            echo "Using HOMEBREW_TAP_TOKEN"
+          elif [ -n "$GITHUB_TOKEN" ]; then
+            TAP_GITHUB_TOKEN="$GITHUB_TOKEN"
+            echo "Using default GITHUB_TOKEN (works if homebrew-tap is in the same organization)"
+          else
+            echo "Warning: Neither HOMEBREW_TAP_TOKEN nor GITHUB_TOKEN is available"
+            echo "Skipping Homebrew tap update"
+            exit 0
+          fi
+          
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Clone the tap repository
+          echo "Cloning homebrew-tap repository..."
+          if ! git clone https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/productdevbook/homebrew-tap.git /tmp/homebrew-tap; then
+            echo "Error: Failed to clone homebrew-tap repository"
+            echo "Please ensure:"
+            echo "  1. Repository exists: https://github.com/productdevbook/homebrew-tap"
+            echo "  2. HOMEBREW_TAP_TOKEN has proper permissions"
+            exit 1
+          fi
+          
+          cd /tmp/homebrew-tap
+          
+          # Create Casks directory if it doesn't exist
+          mkdir -p Casks
+          
+          CASK_FILE="Casks/portkiller.rb"
+          
+          # Update cask formula
+          cat > "$CASK_FILE" << EOF
+          cask "portkiller" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "${DMG_URL}"
+            name "PortKiller"
+            desc "Menu bar app to find and kill processes running on open ports"
+            homepage "https://github.com/${{ github.repository }}"
+
+            depends_on macos: ">= :sequoia"
+            depends_on arch: :arm64
+
+            app "PortKiller.app"
+
+            zap trash: [
+              "~/Library/Preferences/com.productdevbook.PortKiller.plist",
+              "~/Library/Caches/com.productdevbook.PortKiller",
+            ]
+          end
+          EOF
+          
+          # Commit and push
+          git add "$CASK_FILE"
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update portkiller to v${VERSION}" \
+                       -m "Updated by GitHub Actions from port-killer release workflow." \
+                       -m "Release: https://github.com/${{ github.repository }}/releases/tag/v${VERSION}"
+            git push origin main
+            echo "✅ Successfully updated Homebrew tap to v${VERSION}"
+          fi
+
