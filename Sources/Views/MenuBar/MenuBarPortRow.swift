@@ -41,6 +41,19 @@ struct MenuBarPortRow: View {
             Divider()
             Button { state.toggleWatch(port.port) } label: { Label(state.isWatching(port.port) ? "Stop Watching" : "Watch Port", systemImage: state.isWatching(port.port) ? "eye.slash" : "eye") }
             Divider()
+            
+            if state.isFamiliar(port) {
+                if state.processFamiliarityData.alwaysShowProcessKeys.contains(port.processKey) {
+                    Button { state.removeFamiliarityMark(port) } label: { Label("Remove Always Show", systemImage: "eye.slash") }
+                } else {
+                    Button { state.removeFamiliarityMark(port) } label: { Label("Remove Familiar Mark", systemImage: "xmark.circle") }
+                }
+            } else {
+                Button { state.markAsFamiliar(port) } label: { Label("Mark as Familiar (Hide)", systemImage: "eye.slash") }
+                Button { state.markAsAlwaysShow(port) } label: { Label("Always Show", systemImage: "eye.fill") }
+            }
+            
+            Divider()
             Button { if let url = URL(string: "http://localhost:\(port.port)") { NSWorkspace.shared.open(url) } } label: { Label("Open in Browser", systemImage: "globe.fill") }.keyboardShortcut("o", modifiers: .command)
             Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString("http://localhost:\(port.port)", forType: .string) } label: { Label("Copy URL", systemImage: "document.on.clipboard") }
 

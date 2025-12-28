@@ -164,6 +164,36 @@ struct PortListRow: View {
             }
 
             Divider()
+            
+            if appState.isFamiliar(port) {
+                if appState.processFamiliarityData.alwaysShowProcessKeys.contains(port.processKey) {
+                    Button {
+                        appState.removeFamiliarityMark(port)
+                    } label: {
+                        Label("Remove Always Show", systemImage: "eye.slash")
+                    }
+                } else {
+                    Button {
+                        appState.removeFamiliarityMark(port)
+                    } label: {
+                        Label("Remove Familiar Mark", systemImage: "xmark.circle")
+                    }
+                }
+            } else {
+                Button {
+                    appState.markAsFamiliar(port)
+                } label: {
+                    Label("Mark as Familiar (Hide)", systemImage: "eye.slash")
+                }
+                
+                Button {
+                    appState.markAsAlwaysShow(port)
+                } label: {
+                    Label("Always Show", systemImage: "eye.fill")
+                }
+            }
+
+            Divider()
 
             Button {
                 NSPasteboard.general.clearContents()
