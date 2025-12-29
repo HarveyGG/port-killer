@@ -25,8 +25,15 @@ Perfect for developers who need to quickly free up ports like 3000, 8080, 5173, 
 ### Homebrew
 
 ```bash
-brew install --cask productdevbook/tap/portkiller
+# Add tap and install
+brew tap HarveyGG/tap
+brew install --cask portkiller
+
+# Or install directly
+brew install --cask HarveyGG/tap/portkiller
 ```
+
+详细安装说明请参考 [Homebrew 安装指南](docs/HOMEBREW_INSTALL.md)
 
 ### Download
 

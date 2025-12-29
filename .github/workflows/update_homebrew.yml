@@ -137,8 +137,8 @@ jobs:
             app "PortKiller.app"
 
             zap trash: [
-              "~/Library/Preferences/com.productdevbook.PortKiller.plist",
-              "~/Library/Caches/com.productdevbook.PortKiller",
+              "~/Library/Preferences/com.portkiller.app.plist",
+              "~/Library/Caches/com.portkiller.app",
             ]
           end
           EOF
